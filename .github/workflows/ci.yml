@@ -1,0 +1,29 @@
+name: test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        elixir: ['1.18', '1.20.5']
+    env:
+      IMAGE: elixir:${{ matrix.elixir }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Resolve and record official runtime image
+        run: |
+          docker pull "$IMAGE"
+          DIGEST=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
+          printf '%s\n' "$DIGEST"
+          printf 'Runtime image: `%s`\n' "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
+      - name: Compile, test and demonstrate offline
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp -e ERL_FLAGS="+S 2:2 +SDcpu 1 +SDio 1" -v "$GITHUB_WORKSPACE:/project" -w /project "$IMAGE" sh -c 'elixir --version && mix compile --warnings-as-errors && mix test --seed 0 && mix run demo/assert_demo.exs && mix run demo/assert_demo.exs --json'
